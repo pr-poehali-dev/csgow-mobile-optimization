@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import Icon from '@/components/ui/icon';
 import { useToast } from '@/hooks/use-toast';
 import Game3D from '@/components/Game3D';
+import MultiplayerGame from '@/components/MultiplayerGame';
 
 interface User {
   id: number;
@@ -12,7 +13,7 @@ interface User {
   balance: number;
 }
 
-type Screen = 'auth' | 'menu' | 'profile' | 'game' | 'game-bots';
+type Screen = 'auth' | 'menu' | 'profile' | 'game' | 'game-bots' | 'multiplayer-lobby' | 'multiplayer-game';
 
 export default function Index() {
   const [screen, setScreen] = useState<Screen>('auth');
@@ -20,6 +21,8 @@ export default function Index() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [user, setUser] = useState<User | null>(null);
+  const [roomId, setRoomId] = useState('');
+  const [rooms, setRooms] = useState<any[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -128,8 +131,106 @@ export default function Index() {
     );
   }
 
-  if (screen === 'game' || screen === 'game-bots') {
+  if (screen === 'game-bots') {
     return <Game3D onExit={() => setScreen('menu')} />;
+  }
+
+  if (screen === 'multiplayer-game' && user && roomId) {
+    return <MultiplayerGame onExit={() => setScreen('menu')} roomId={roomId} user={user} />;
+  }
+
+  if (screen === 'multiplayer-lobby') {
+    const createRoom = async () => {
+      try {
+        const response = await fetch('https://functions.poehali.dev/487098f8-e21c-4c5d-9ced-cc62e56ea07a', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'create_room' })
+        });
+        const data = await response.json();
+        if (data.success) {
+          setRoomId(data.roomId);
+          setScreen('multiplayer-game');
+        }
+      } catch (error) {
+        toast({ title: 'Ошибка', description: 'Не удалось создать комнату', variant: 'destructive' });
+      }
+    };
+
+    const joinRoom = async (rid: string) => {
+      setRoomId(rid);
+      setScreen('multiplayer-game');
+    };
+
+    const loadRooms = async () => {
+      try {
+        const response = await fetch('https://functions.poehali.dev/487098f8-e21c-4c5d-9ced-cc62e56ea07a', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'get_rooms' })
+        });
+        const data = await response.json();
+        if (data.success) {
+          setRooms(data.rooms);
+        }
+      } catch (error) {
+        console.error('Failed to load rooms');
+      }
+    };
+
+    useEffect(() => {
+      loadRooms();
+      const interval = setInterval(loadRooms, 3000);
+      return () => clearInterval(interval);
+    }, []);
+
+    return (
+      <div className="min-h-screen bg-background p-4">
+        <div className="max-w-4xl mx-auto animate-fade-in">
+          <div className="flex items-center justify-between mb-6">
+            <Button onClick={() => setScreen('menu')} variant="ghost">
+              <Icon name="ArrowLeft" className="mr-2" />
+              Назад
+            </Button>
+            <h2 className="text-3xl font-bold text-primary">Мультиплеер</h2>
+            <div className="w-24" />
+          </div>
+
+          <Card className="p-6 bg-card border-2 border-border mb-6">
+            <Button onClick={createRoom} className="w-full h-14" size="lg">
+              <Icon name="Plus" className="mr-2" />
+              Создать комнату
+            </Button>
+          </Card>
+
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold mb-4">Активные комнаты ({rooms.length})</h3>
+            {rooms.length === 0 && (
+              <Card className="p-8 bg-card/50 text-center">
+                <Icon name="Users" className="mx-auto mb-4 text-muted-foreground" size={48} />
+                <p className="text-muted-foreground">Нет активных комнат. Создайте новую!</p>
+              </Card>
+            )}
+            {rooms.map((room) => (
+              <Card key={room.id} className="p-4 bg-card border border-border hover:border-primary transition-colors">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-bold text-lg">Комната {room.id}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Игроков: {room.players}/{room.maxPlayers}
+                    </p>
+                  </div>
+                  <Button onClick={() => joinRoom(room.id)} disabled={room.players >= room.maxPlayers}>
+                    <Icon name="LogIn" className="mr-2" />
+                    Войти
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (screen === 'profile' && user) {
@@ -198,7 +299,7 @@ export default function Index() {
 
         <div className="grid md:grid-cols-2 gap-4 mb-8">
           <Card
-            onClick={() => setScreen('game')}
+            onClick={() => setScreen('multiplayer-lobby')}
             className="p-6 bg-card border-2 border-primary hover:border-primary/50 transition-all cursor-pointer group"
           >
             <div className="flex items-center space-x-4">

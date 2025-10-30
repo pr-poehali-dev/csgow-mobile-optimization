@@ -1,0 +1,32 @@
+{
+  "tests": [
+    {
+      "name": "Create multiplayer room",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "create_room"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "success": true,
+        "roomId": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get active rooms",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "get_rooms"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "success": true,
+        "rooms": "array"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
