@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import Icon from '@/components/ui/icon';
 import { useToast } from '@/hooks/use-toast';
+import Game3D from '@/components/Game3D';
 
 interface User {
   id: number;
@@ -11,7 +12,7 @@ interface User {
   balance: number;
 }
 
-type Screen = 'auth' | 'menu' | 'profile';
+type Screen = 'auth' | 'menu' | 'profile' | 'game' | 'game-bots';
 
 export default function Index() {
   const [screen, setScreen] = useState<Screen>('auth');
@@ -127,6 +128,10 @@ export default function Index() {
     );
   }
 
+  if (screen === 'game' || screen === 'game-bots') {
+    return <Game3D onExit={() => setScreen('menu')} />;
+  }
+
   if (screen === 'profile' && user) {
     return (
       <div className="min-h-screen bg-background p-4">
@@ -192,7 +197,10 @@ export default function Index() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-4 mb-8">
-          <Card className="p-6 bg-card border-2 border-primary hover:border-primary/50 transition-all cursor-pointer group">
+          <Card
+            onClick={() => setScreen('game')}
+            className="p-6 bg-card border-2 border-primary hover:border-primary/50 transition-all cursor-pointer group"
+          >
             <div className="flex items-center space-x-4">
               <div className="w-16 h-16 rounded bg-primary/20 flex items-center justify-center group-hover:scale-110 transition-transform">
                 <Icon name="Users" size={32} className="text-primary" />
@@ -204,7 +212,10 @@ export default function Index() {
             </div>
           </Card>
 
-          <Card className="p-6 bg-card border-2 border-secondary hover:border-secondary/50 transition-all cursor-pointer group">
+          <Card
+            onClick={() => setScreen('game-bots')}
+            className="p-6 bg-card border-2 border-secondary hover:border-secondary/50 transition-all cursor-pointer group"
+          >
             <div className="flex items-center space-x-4">
               <div className="w-16 h-16 rounded bg-secondary/20 flex items-center justify-center group-hover:scale-110 transition-transform">
                 <Icon name="Bot" size={32} className="text-secondary" />
