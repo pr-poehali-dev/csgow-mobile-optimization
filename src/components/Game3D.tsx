@@ -5,24 +5,57 @@ import * as THREE from 'three';
 import { Button } from './ui/button';
 import Icon from './ui/icon';
 
-interface PlayerProps {
-  position: [number, number, number];
+interface Bot {
+  id: number;
+  position: THREE.Vector3;
+  rotation: number;
+  health: number;
+  isDead: boolean;
+  target: THREE.Vector3;
 }
 
-function Player({ position }: PlayerProps) {
+interface BotEnemyProps {
+  bot: Bot;
+  onHit: (id: number) => void;
+}
+
+function BotEnemy({ bot, onHit }: BotEnemyProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  
+  const groupRef = useRef<THREE.Group>(null);
+
   useFrame(() => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += 0.01;
+    if (!groupRef.current || bot.isDead) return;
+
+    const direction = new THREE.Vector3().subVectors(bot.target, bot.position).normalize();
+    bot.position.add(direction.multiplyScalar(0.02));
+
+    if (bot.position.distanceTo(bot.target) < 1) {
+      bot.target.set(
+        (Math.random() - 0.5) * 30,
+        0.9,
+        (Math.random() - 0.5) * 30
+      );
     }
+
+    bot.rotation = Math.atan2(direction.x, direction.z);
+    groupRef.current.position.copy(bot.position);
+    groupRef.current.rotation.y = bot.rotation;
   });
 
+  if (bot.isDead) return null;
+
   return (
-    <mesh ref={meshRef} position={position}>
-      <boxGeometry args={[0.5, 1.8, 0.5]} />
-      <meshStandardMaterial color="#F97316" />
-    </mesh>
+    <group ref={groupRef} position={bot.position}>
+      <mesh ref={meshRef} position={[0, 0.9, 0]}>
+        <boxGeometry args={[0.6, 1.8, 0.4]} />
+        <meshStandardMaterial color="#0EA5E9" />
+      </mesh>
+      <mesh position={[0, 1.5, 0.2]}>
+        <sphereGeometry args={[0.25, 16, 16]} />
+        <meshStandardMaterial color="#1A1F2C" />
+      </mesh>
+      <pointLight position={[0, 2, 0]} intensity={0.3} color="#0EA5E9" distance={3} />
+    </group>
   );
 }
 
@@ -54,7 +87,8 @@ function Box({ position, color = '#0EA5E9' }: any) {
 }
 
 interface GameSceneProps {
-  onShoot: () => void;
+  bots: Bot[];
+  onBotHit: (id: number) => void;
   isMobile: boolean;
   moveForward: boolean;
   moveBackward: boolean;
@@ -62,10 +96,9 @@ interface GameSceneProps {
   moveRight: boolean;
 }
 
-function GameScene({ onShoot, isMobile, moveForward, moveBackward, moveLeft, moveRight }: GameSceneProps) {
+function GameScene({ bots, onBotHit, isMobile, moveForward, moveBackward, moveLeft, moveRight }: GameSceneProps) {
   const { camera } = useThree();
   const velocity = useRef(new THREE.Vector3());
-  const direction = useRef(new THREE.Vector3());
 
   useFrame(() => {
     if (!isMobile) return;
@@ -115,6 +148,10 @@ function GameScene({ onShoot, isMobile, moveForward, moveBackward, moveLeft, mov
       <Box position={[-8, 1, 0]} color="#2D3748" />
       <Box position={[8, 1, 0]} color="#2D3748" />
 
+      {bots.map((bot) => (
+        <BotEnemy key={bot.id} bot={bot} onHit={onBotHit} />
+      ))}
+
       {!isMobile && <PointerLockControls />}
     </>
   );
@@ -129,14 +166,40 @@ export default function Game3D({ onExit }: Game3DProps) {
   const [ammo, setAmmo] = useState(30);
   const [health, setHealth] = useState(100);
   const [isMobile, setIsMobile] = useState(false);
+  const [bots, setBots] = useState<Bot[]>([]);
+  const [hitmarker, setHitmarker] = useState(false);
 
   const [moveForward, setMoveForward] = useState(false);
   const [moveBackward, setMoveBackward] = useState(false);
   const [moveLeft, setMoveLeft] = useState(false);
   const [moveRight, setMoveRight] = useState(false);
 
+  const shootSound = useRef<HTMLAudioElement | null>(null);
+  const hitSound = useRef<HTMLAudioElement | null>(null);
+
   useEffect(() => {
     setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+
+    shootSound.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApJn+DyvmwhBSuBzvLZiTYIG2m98OScTQwOU6rk8rNfGAU7k9nzzXksBSl7yPDajkULElyx6OyrUxMNTKXh8rZjHAU2j9Tv0ogxBylz0PDhlkAMFGS56+mjUBELQZnf8LxsIQUqfs7y3Ik2CBxpvfDlm0wMDlOo5PKwXhgFOpPY88t6LAUpfM3w2Y9FCxJcsejtrFMTDUyn4POxYhwFNY/U7tWHMgcrdc/w4ZVBDBVlu+vpo1ARC0GZ3/C6ayEFKn/O8t2INgcbab3w55xPDA5Tp+TysV4YBTmT2fPKfSwFKX/N8NiQRQwSXLHo7axTEw1Mp+DzsGIcBTOO1e7VhzUGLHjN8OGXRAwRZLrr6aJQEgpFm9/wvGwhBSt/zvLciT');
+    hitSound.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApJn+DyvmwhBSuBzvLZiTYIG2m98OScTQwOU6rk8rNfGAU7k9nzzXksBSl7yPDajkULElyx6OyrUxMNTKXh8rZjHAU2j9Tv0ogxBylz0PDhlkAMFGS56+mjUBELQZnf8LxsIQUqfs7y3Ik2CBxpvfDlm0wMDlOo5PKwXhgFOpPY88t6LAUpfM3w2Y9FCxJcsejtrFMTDUyn4POxYhwFNY/U7tWHMgcrdc/w4ZVBDBVlu+vpo1ARC0GZ3/C6ayEFKn/O8t2INgcbab3w55xPDA5Tp+TysV4YBTmT2fPKfSwFKX/N8NiQRQwSXLHo7axTEw1Mp+DzsGIcBTOO1e7VhzUGLHjN8OGXRAwRZLrr6aJQEgpFm9/wvGwhBSt/zvLciT');
+
+    const initialBots: Bot[] = Array.from({ length: 5 }, (_, i) => ({
+      id: i,
+      position: new THREE.Vector3(
+        (Math.random() - 0.5) * 30,
+        0.9,
+        (Math.random() - 0.5) * 30
+      ),
+      rotation: Math.random() * Math.PI * 2,
+      health: 100,
+      isDead: false,
+      target: new THREE.Vector3(
+        (Math.random() - 0.5) * 30,
+        0.9,
+        (Math.random() - 0.5) * 30
+      ),
+    }));
+    setBots(initialBots);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.code) {
@@ -166,12 +229,47 @@ export default function Game3D({ onExit }: Game3DProps) {
   }, []);
 
   const handleShoot = () => {
-    if (ammo > 0) {
-      setAmmo(ammo - 1);
-      if (Math.random() > 0.7) {
-        setKills(kills + 1);
+    if (ammo <= 0) return;
+
+    setAmmo(ammo - 1);
+    shootSound.current?.play().catch(() => {});
+
+    const raycaster = new THREE.Raycaster();
+    const camera = new THREE.Camera();
+    
+    const hit = Math.random() > 0.6;
+    
+    if (hit) {
+      const aliveBots = bots.filter(b => !b.isDead);
+      if (aliveBots.length > 0) {
+        const targetBot = aliveBots[Math.floor(Math.random() * aliveBots.length)];
+        handleBotHit(targetBot.id);
       }
     }
+  };
+
+  const handleBotHit = (botId: number) => {
+    hitSound.current?.play().catch(() => {});
+    setHitmarker(true);
+    setTimeout(() => setHitmarker(false), 200);
+
+    setBots((prevBots) =>
+      prevBots.map((bot) => {
+        if (bot.id === botId && !bot.isDead) {
+          const newHealth = bot.health - 34;
+          if (newHealth <= 0) {
+            setKills((k) => k + 1);
+            return { ...bot, health: 0, isDead: true };
+          }
+          return { ...bot, health: newHealth };
+        }
+        return bot;
+      })
+    );
+  };
+
+  const reload = () => {
+    setAmmo(30);
   };
 
   return (
@@ -183,7 +281,8 @@ export default function Game3D({ onExit }: Game3DProps) {
         onClick={handleShoot}
       >
         <GameScene
-          onShoot={handleShoot}
+          bots={bots}
+          onBotHit={handleBotHit}
           isMobile={isMobile}
           moveForward={moveForward}
           moveBackward={moveBackward}
@@ -208,6 +307,12 @@ export default function Game3D({ onExit }: Game3DProps) {
               <span className="font-bold text-xl">{kills}</span>
             </div>
           </div>
+          {ammo === 0 && (
+            <Button onClick={reload} className="mt-2 w-full" size="sm">
+              <Icon name="RotateCw" className="mr-1" size={16} />
+              Reload
+            </Button>
+          )}
         </div>
 
         <Button
@@ -221,9 +326,15 @@ export default function Game3D({ onExit }: Game3DProps) {
       </div>
 
       <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
-        <div className="w-6 h-6 border-2 border-primary rounded-full" />
+        <div className={`w-6 h-6 border-2 rounded-full transition-all ${hitmarker ? 'border-destructive scale-150' : 'border-primary'}`} />
         <div className="absolute top-1/2 left-1/2 w-0.5 h-4 bg-primary -translate-x-1/2 -translate-y-1/2" />
         <div className="absolute top-1/2 left-1/2 w-4 h-0.5 bg-primary -translate-x-1/2 -translate-y-1/2" />
+        {hitmarker && (
+          <>
+            <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-destructive rotate-45 -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute top-1/2 left-1/2 w-3 h-0.5 bg-destructive -rotate-45 -translate-x-1/2 -translate-y-1/2" />
+          </>
+        )}
       </div>
 
       {isMobile && (
@@ -272,13 +383,22 @@ export default function Game3D({ onExit }: Game3DProps) {
           >
             <Icon name="Target" size={32} />
           </button>
+
+          {ammo === 0 && (
+            <button
+              onClick={reload}
+              className="fixed bottom-32 right-8 w-16 h-16 bg-primary rounded-full flex items-center justify-center z-10 active:scale-95 transition-transform shadow-lg"
+            >
+              <Icon name="RotateCw" size={24} />
+            </button>
+          )}
         </>
       )}
 
       {!isMobile && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-card/80 backdrop-blur px-6 py-3 rounded border border-border z-10 pointer-events-none">
           <p className="text-sm text-muted-foreground">
-            WASD - движение • ЛКМ - стрельба • Мышь - прицел • ESC - курсор
+            WASD - движение • ЛКМ - стрельба • R - перезарядка • Мышь - прицел • ESC - курсор
           </p>
         </div>
       )}
